@@ -30,11 +30,13 @@ class ExponentialRandomVariable:
 
 class EmpiricalRandomVariable:
 
-    def __init__(self, filename, smooth):
+    def __init__(self, filename, smooth, packetsize, headersize):
         self.smooth = smooth
         self.minCDF_ = 0
         self.maxCDF_ = 1
         self.table_ = []
+        self.packetSize_ = packetsize
+        self.headerSize_ = headersize
         for i in range(65536):
             self.table_.append(CDFentry())
         if(filename != ""):
@@ -63,7 +65,7 @@ class EmpiricalRandomVariable:
             prev_sz = self.table_[numEntry_].val_
             numEntry_ += 1
 
-        self.mean_flow_size = w_sum * 1460.0;
+        self.mean_flow_size = w_sum * float(self.packetSize_ - self.headerSize_);
         file.close()
         self.numEntry_ = numEntry_
         return numEntry_
