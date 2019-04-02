@@ -89,6 +89,53 @@ def poissonFlowGeneratorMaxLimits(packet_size, header_size, num_flows, num_hosts
         
     return flows
 
+def dcqcnIncastGenerator(packet_size, header_size, num_hosts_per_leaf, num_leaf, rtt, size, fcnt, incast_degree):
+    '''
+    Assuming for now that the size in #packets is prescpeficied to the method
+    '''
+    num_hosts = num_hosts_per_leaf * num_leaf
+    src_host_flow_cnt = [0] * num_hosts
+    dst_host_flow_cnt = [0] * num_hosts
+    avail_src_set = set(range(num_hosts))
+    avail_dst_set = set(range(num_hosts))
+    flows = []
+    arrival_time = 1.0
+    flowid = 0
+
+    while(len(avail_src_set) > 0 and len(avail_dst_set) > 0):
+        arrival_time += rtt/2
+        for i in range(num_leaf):
+
+            possible_dst_set = set(range(i*num_hosts_per_leaf,(i+1)*num_hosts_per_leaf))
+            choice_dst_set = possible_dst_set.intersection(avail_dst_set)
+            if(len(choice_dst_set) > 0):
+                dst = random.sample(choice_dst_set,1)[0]
+            else:
+                continue #no dst possible to choose within this leaf
+
+            possible_src_set = set(range(num_hosts))
+            choice_src_set = possible_src_set.intersection(avail_src_set)
+            if(len(choice_src_set) >= incast_degree):
+                chosen_src_list = random.sample(choice_src_set,incast_degree)
+            elif(len(choice_src_set) > 0): #choose all the sources possible if the max possible count < incast degree
+                chosen_src_list = random.sample(choice_src_set,len(choice_src_set))
+
+            for src in chosen_src_list:
+                flow = [arrival_time, src, dst, flowid, size*(packet_size - header_size)]
+                flows.append(flow)
+                flowid += 1
+                src_host_flow_cnt[src] += 1
+                dst_host_flow_cnt[dst] += 1
+                if(src_host_flow_cnt[src] >= fcnt):
+                    avail_src_set.remove(src)
+            if(dst_host_flow_cnt[dst] >= fcnt-incast_degree):
+                avail_dst_set.remove(dst) 
+                
+        
+    print flowid
+    print len(flows)
+    return flows
+
 def write_to_file(packet_size, header_size, output_file, flows):
     file = open(output_file, "w")
     for f in flows:
@@ -97,9 +144,9 @@ def write_to_file(packet_size, header_size, output_file, flows):
         file.write(s)
     file.close()
 
-def write_to_file_dcqcn(packet_size, header_size, output_file, flows, num_flows):
+def write_to_file_dcqcn(packet_size, header_size, output_file, flows):
     file = open(output_file, "w")
-    file.write(str(num_flows)+'\n')
+    file.write(str(len(flows))+'\n')
     for f in flows:
         s = ""
         s += "{0} {1} 3 {2} {3} 10.5\n".format(f[1], f[2], f[4]/(packet_size - header_size), f[0])
@@ -130,7 +177,7 @@ def test_avg_load(num_hosts, flows, bandwidth, test_fcnt, fcnt=128):
             max_arrival_time[src] = arrival_time
 
     for i in range(num_hosts):
-        load_per_port[i] = float(data_sent_per_port[i] * 8) / float(bandwidth * (max_arrival_time[i] - min_arrival_time[i]))
+        load_per_port[i] = float(data_sent_per_port[i] * 8) / float(bandwidth * (max_arrival_time[i] - 1.0))
     print "Load across ports: avg: ", sum(load_per_port)/len(load_per_port), " max: ", max(load_per_port), " min: ", min(load_per_port)
 
     
@@ -163,6 +210,10 @@ def main():
         help='size of packet header in bytes')
     parser.add_argument('-s', '--scale', default=144,
         help='the number of nodes')
+    parser.add_argument('-lf','--leaf',default=9,
+        help='the number of leaves/pods for dcqcn incast: helps in creating a scenario of sustained incast into a particular leaf/pod')
+    parser.add_argument('-np','--numpackets',default=1000,
+        help='the number of packets per flow for sustained incast for dcqcn')
     parser.add_argument('-f', '--flows', default=10000,
         help='the number of flows')
     parser.add_argument('-c', '--cdf', default='CDF_dctcp.txt',
@@ -175,21 +226,30 @@ def main():
         help='the output file folder')
     parser.add_argument('-x','--fcnt',default=128,
         help='fcnt variable in DCQCN simulator default: 128')
+    parser.add_argument('-i','--incast', default='20',
+        help='thr incast degree for dcqcn incast generator')
+    parser.add_argument('-r','--rtt', default='0.000001',
+        help='the RTT for the topology')
     parser.add_argument('-t','--type', default='P',
-        help='type of workload generator [P: Poisson, PD: Poisson for DCQCN, ... more to be added soon]')
+        help='type of workload generator [P: Poisson, PD: Poisson for DCQCN, DI: DCQCN Incast... more to be added soon]')
 
     args = parser.parse_args()
     packet_size = int(args.packetsize)
     header_size = int(args.headersize)
     num_hosts = int(args.scale)
     num_flows = int(args.flows)
+    num_leaf = int(args.leaf)
+    num_packets = int(args.numpackets)
     load = float(args.load)
     cdf = args.cdf
     bandwidth = float(args.bandwidth)
     output = str(args.output)
+    rtt = float(args.rtt)
 
     fcnt = int(args.fcnt)
+    incast_degree = int(args.incast)
     gen_type = str(args.type)
+    num_hosts_per_leaf = num_hosts / num_leaf
     # FILE = str(scale)+'-'+str(load)+'-'+str(stages)+'-'+str(args.incast)+'-'+str(args.outcast)+'-'+ str(data_dist)
     # output_file = output + FILE + '.txt'
     if(gen_type == 'P'):
@@ -200,7 +260,12 @@ def main():
         assert(num_flows <= (num_hosts * fcnt))
         flows = poissonFlowGeneratorMaxLimits(packet_size, header_size, num_flows, num_hosts, bandwidth, load, cdf, 1,fcnt)
         test_avg_load(num_hosts,flows,bandwidth,True,fcnt)
-        write_to_file_dcqcn(packet_size, header_size, output, flows, num_flows)
+        write_to_file_dcqcn(packet_size, header_size, output, flows)
+    elif(gen_type == 'DI'):
+        assert(num_flows <= (num_hosts * fcnt))
+        flows = dcqcnIncastGenerator(packet_size,header_size,num_hosts_per_leaf,num_leaf,rtt, num_packets, fcnt, incast_degree)
+        test_avg_load(num_hosts,flows,bandwidth,True,fcnt)
+        write_to_file_dcqcn(packet_size,header_size,output,flows)
     else:
         print "Invalid generator type"
 
