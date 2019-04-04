@@ -4,6 +4,7 @@ import numpy as np
 import os
 import sys
 import scipy.stats
+import random
 
 from random_variable import *
 
@@ -63,6 +64,87 @@ def poissonFlowGeneratorMaxLimits(packet_size, header_size, num_flows, num_hosts
             if i != j:
                 first_flow_time = 1.0 + nv_intarr.value()
                 heapq.heappush(pq,[first_flow_time, i, j, nv_bytes, nv_intarr])
+
+    flows = []
+    while len(flows) < num_flows:
+        element = heapq.heappop(pq)
+        flow_id = len(flows)
+        time = element[0]
+        src = element[1]
+        dst = element[2]
+        nv_bytes = element[3]
+        nv_intarr = element[4]
+        size = nv_bytes.value() + 0.5 # truncate(val + 0.5) equivalent to round to nearest int
+        if (size > 2500000):
+            size = 2500000
+        size = int(size) * (packet_size - header_size)
+
+        if( (src_host_flow_cnt[src] < fcnt) and (dst_host_flow_cnt[dst] < fcnt) ):
+            next_time = time + nv_intarr.value()
+            flows.append([time, src, dst, flow_id, size])
+            heapq.heappush(pq,[next_time, src, dst, nv_bytes, nv_intarr])
+            src_host_flow_cnt[src] += 1
+            dst_host_flow_cnt[dst] += 1
+        else:
+            pass
+        
+    return flows
+
+def poissonSemiPermutationFlowGeneratorMaxLimits(packet_size, header_size, num_flows, num_hosts, bandwidth, load, filename, smooth,fcnt,alpha):
+
+    pq = []
+    nv_bytes = EmpiricalRandomVariable(filename, smooth,packet_size,header_size)
+
+    mean_flow_size = nv_bytes.mean_flow_size
+
+    permutation_host_count = int(float(num_hosts) * alpha)
+    assert((permutation_host_count == 0) or (permutation_host_count >= 2))
+    all_to_all_host_count = num_hosts - permutation_host_count
+    assert((all_to_all_host_count == 0) or (all_to_all_host_count >= 2))
+
+    lmda = bandwidth * load / (mean_flow_size * 8.0 / (packet_size - header_size) * packet_size)
+    lambda_per_permutation_host = lmda
+    lambda_per_all_to_all_host = lmda / (all_to_all_host_count - 1)
+
+    nv_intarr_permutation = ExponentialRandomVariable(1.0 / lambda_per_permutation_host)
+
+    perm_srcs = set()
+    perm_dsts = set()
+
+    while(len(perm_srcs) < permutation_host_count):
+        i = random.choice(range(num_hosts))
+        if((i in perm_srcs) == False):
+            perm_srcs.add(i)
+
+    assert(len(perm_srcs) == permutation_host_count)
+
+    for src in perm_srcs:
+        temp_dst = random.choice(list(perm_srcs))
+        while((temp_dst == src) or (temp_dst in perm_dsts)):
+            temp_dst = random.choice(list(perm_srcs))
+        perm_dsts.add(temp_dst)
+        assert(src != temp_dst)
+        first_flow_time = 1.0 + nv_intarr_permutation.value()
+        heapq.heappush(pq,[first_flow_time, src, temp_dst, nv_bytes, nv_intarr_permutation])
+
+    nv_intarr_all_to_all = ExponentialRandomVariable(1.0 / lambda_per_all_to_all_host)
+
+    for i in range(num_hosts):
+        if(i in perm_srcs):
+            continue
+        for j in range(num_hosts):
+            if(j in perm_dsts):
+                continue
+            if i != j:
+                first_flow_time = 1.0 + nv_intarr_all_to_all.value()
+                heapq.heappush(pq,[first_flow_time, i, j, nv_bytes, nv_intarr_all_to_all])
+
+    src_host_flow_cnt = []
+    dst_host_flow_cnt = []
+
+    for i in range(num_hosts):
+        src_host_flow_cnt.append(0)
+        dst_host_flow_cnt.append(0)
 
     flows = []
     while len(flows) < num_flows:
@@ -228,6 +310,8 @@ def main():
         help='fcnt variable in DCQCN simulator default: 128')
     parser.add_argument('-i','--incast', default='20',
         help='thr incast degree for dcqcn incast generator')
+    parser.add_argument('-a','--alpha', default='0.5',
+        help='the degree of permutation -- 0.25 implies 25% nodes involved in permutation, 75% all-to-all')
     parser.add_argument('-r','--rtt', default='0.000001',
         help='the RTT for the topology')
     parser.add_argument('-t','--type', default='P',
@@ -248,6 +332,7 @@ def main():
 
     fcnt = int(args.fcnt)
     incast_degree = int(args.incast)
+    alpha = float(args.alpha)
     gen_type = str(args.type)
     num_hosts_per_leaf = num_hosts / num_leaf
     # FILE = str(scale)+'-'+str(load)+'-'+str(stages)+'-'+str(args.incast)+'-'+str(args.outcast)+'-'+ str(data_dist)
@@ -264,6 +349,11 @@ def main():
     elif(gen_type == 'DI'):
         assert(num_flows <= (num_hosts * fcnt))
         flows = dcqcnIncastGenerator(packet_size,header_size,num_hosts_per_leaf,num_leaf,rtt, num_packets, fcnt, incast_degree)
+        test_avg_load(num_hosts,flows,bandwidth,True,fcnt)
+        write_to_file_dcqcn(packet_size,header_size,output,flows)
+    elif(gen_type == 'DSP'):
+        assert(num_flows <= (num_hosts * fcnt))
+        flows = poissonSemiPermutationFlowGeneratorMaxLimits(packet_size, header_size, num_flows, num_hosts, bandwidth, load, cdf, 1,fcnt,alpha)
         test_avg_load(num_hosts,flows,bandwidth,True,fcnt)
         write_to_file_dcqcn(packet_size,header_size,output,flows)
     else:
