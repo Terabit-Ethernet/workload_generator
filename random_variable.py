@@ -11,6 +11,12 @@ class CDFentry:
         cdf_ = 0
         val_ = 0
 
+class ConstantVariable:
+    def __init__(self,val):
+        self.val = val
+    def value(self):
+        return self.val
+
 class UniformRandomVariable:
     def __init__(self):
         self.min_ = 0.0
