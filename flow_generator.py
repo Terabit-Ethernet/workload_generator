@@ -493,6 +493,15 @@ def write_to_file_dcqcn(packet_size, header_size, output_file, flows):
         file.write(s)
     file.close()
 
+def write_to_file_hpcc(packet_size, header_size, output_file, flows):
+    file = open(output_file, "w")
+    file.write(str(len(flows))+'\n')
+    for f in flows:
+        s = ""
+        s += "{0} {1} 3 100 {2} {3}\n".format(f[1], f[2], f[4]/(packet_size - header_size), f[0])
+        file.write(s)
+    file.close()
+
 def test_avg_load(num_hosts, flows, bandwidth, test_fcnt, fcnt=128):
     #flows.append([time, src, dst, flow_id, size])
     data_sent_per_port = []
@@ -633,6 +642,11 @@ def main():
         flows = poissonSemiPermutationFlowGeneratorMaxLimits(packet_size, header_size, mean_flow_size,num_flows, num_hosts, bandwidth, load, cdf, 1,fcnt,alpha,iat)
         test_avg_load(num_hosts,flows,bandwidth,True,fcnt)
         write_to_file_dcqcn(packet_size,header_size,output,flows)
+    elif(gen_type == 'HPCC'):
+        assert(num_flows <= (num_hosts * fcnt))
+        flows = poissonSemiPermutationFlowGeneratorMaxLimits(packet_size, header_size, mean_flow_size,num_flows, num_hosts, bandwidth, load, cdf, 1,fcnt,alpha,iat)
+        test_avg_load(num_hosts,flows,bandwidth,True,fcnt)
+        write_to_file_hpcc(packet_size,header_size,output,flows)
     elif(gen_type == 'IC'):
         assert(num_flows <= (num_hosts * fcnt))
         flows = poissonIncastGenerator(packet_size, header_size, mean_flow_size,num_flows, num_hosts, bandwidth, load, cdf, 1,fcnt,alpha,iat)
