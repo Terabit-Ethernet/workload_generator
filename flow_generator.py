@@ -249,6 +249,118 @@ def poissonSemiPermutationFlowGeneratorMaxLimits(packet_size, header_size, mean_
         
     return flows
 
+
+def poissonSemiPermutationFlowGeneratorMaxLimitsOversubscription(packet_size, header_size, mean_size, num_flows, num_hosts, bandwidth, load, filename, smooth,fcnt,alpha,iat,ov, num_hosts_per_tor):
+
+    assert(ov >= 1)
+    assert(num_hosts_per_tor >= 1)
+    pq = []
+    nv_bytes = EmpiricalRandomVariable(filename, smooth,packet_size,header_size)
+
+    mean_flow_size = nv_bytes.mean_flow_size
+    if(mean_size > 0):
+        mean_flow_size = mean_size * 1000
+    
+    print(mean_flow_size)
+    permutation_host_count = int(float(num_hosts) * alpha)
+    assert((permutation_host_count == 0) or (permutation_host_count >= 2))
+    all_to_all_host_count = num_hosts - permutation_host_count
+    assert((all_to_all_host_count == 0) or (all_to_all_host_count >= 2))
+
+    lmda = bandwidth * load / (mean_flow_size * 8.0 / (packet_size - header_size) * packet_size)
+    lambda_per_permutation_host = lmda
+    lambda_per_all_to_all_host = lmda / (all_to_all_host_count - 1)
+
+    lambda_per_permutation_host_ov = lambda_per_permutation_host / ov
+    lambda_per_all_to_all_host_ov = lambda_per_all_to_all_host / ov
+
+    if(iat == 0):
+        nv_intarr_permutation = ExponentialRandomVariable(1.0 / lambda_per_permutation_host)
+        nv_intarr_permutation_ov = ExponentialRandomVariable(1.0 / lambda_per_permutation_host_ov)
+    else:
+        assert(mean_flow_size > 0) #only makes senses for constant sized flows
+        nv_intarr_permutation = ConstantVariable(1.0/lambda_per_permutation_host)
+        nv_intarr_permutation_ov = ConstantVariable(1.0/lambda_per_permutation_host_ov)
+
+    perm_srcs = set()
+    perm_dsts = set()
+
+    while(len(perm_srcs) < permutation_host_count):
+        i = random.choice(range(num_hosts))
+        if((i in perm_srcs) == False):
+            perm_srcs.add(i)
+
+    assert(len(perm_srcs) == permutation_host_count)
+
+    for src in perm_srcs:
+        temp_dst = random.choice(list(perm_srcs))
+        while((temp_dst == src) or (temp_dst in perm_dsts)):
+            temp_dst = random.choice(list(perm_srcs))
+        perm_dsts.add(temp_dst)
+        assert(src != temp_dst)
+        if(int(src/num_hosts_per_tor) == int(temp_dst/num_hosts_per_tor)):
+            first_flow_time = 1.0 + nv_intarr_permutation.value()
+            heapq.heappush(pq,[first_flow_time, src, temp_dst, nv_bytes, nv_intarr_permutation])
+        else:
+            first_flow_time = 1.0 + nv_intarr_permutation_ov.value()
+            heapq.heappush(pq,[first_flow_time, src, temp_dst, nv_bytes, nv_intarr_permutation_ov])
+
+    if(iat == 0):
+        nv_intarr_all_to_all = ExponentialRandomVariable(1.0 / lambda_per_all_to_all_host)
+        nv_intarr_all_to_all_ov = ExponentialRandomVariable(1.0 / lambda_per_all_to_all_host_ov)
+    else:
+        assert(mean_flow_size > 0)
+        nv_intarr_all_to_all = ConstantVariable(1.0/lambda_per_all_to_all_host)
+        nv_intarr_all_to_all_ov = ConstantVariable(1.0/lambda_per_all_to_all_host_ov)
+
+    for i in range(num_hosts):
+        if(i in perm_srcs):
+            continue
+        for j in range(num_hosts):
+            if(j in perm_dsts):
+                continue
+            if i != j:
+                if(int(i/num_hosts_per_tor) == int(j/num_hosts_per_tor)):
+                    first_flow_time = 1.0 + nv_intarr_all_to_all.value()
+                    heapq.heappush(pq,[first_flow_time, i, j, nv_bytes, nv_intarr_all_to_all])
+                else:
+                    first_flow_time = 1.0 + nv_intarr_all_to_all_ov.value()
+                    heapq.heappush(pq,[first_flow_time, i, j, nv_bytes, nv_intarr_all_to_all_ov])
+
+    src_host_flow_cnt = []
+    dst_host_flow_cnt = []
+
+    for i in range(num_hosts):
+        src_host_flow_cnt.append(0)
+        dst_host_flow_cnt.append(0)
+
+    flows = []
+    while len(flows) < num_flows:
+        element = heapq.heappop(pq)
+        flow_id = len(flows)
+        time = element[0]
+        src = element[1]
+        dst = element[2]
+        nv_bytes = element[3]
+        nv_intarr = element[4]
+        size = nv_bytes.value() + 0.5 # truncate(val + 0.5) equivalent to round to nearest int
+        if (size > 2500000):
+            size = 2500000
+        size = int(size) * (packet_size - header_size)
+        if(mean_size > 0):
+            size = mean_size * 1000
+
+        if( (src_host_flow_cnt[src] < fcnt) and (dst_host_flow_cnt[dst] < fcnt) ):
+            next_time = time + nv_intarr.value()
+            flows.append([time, src, dst, flow_id, size])
+            heapq.heappush(pq,[next_time, src, dst, nv_bytes, nv_intarr])
+            src_host_flow_cnt[src] += 1
+            dst_host_flow_cnt[dst] += 1
+        else:
+            pass
+        
+    return flows
+
 def poissonIncastGenerator(packet_size, header_size, mean_size, num_flows, num_hosts, bandwidth, load, filename, smooth,fcnt,alpha,iat):
     pq = []
     nv_bytes = EmpiricalRandomVariable(filename, smooth,packet_size,header_size)
@@ -502,6 +614,17 @@ def write_to_file_hpcc(packet_size, header_size, output_file, flows):
         file.write(s)
     file.close()
 
+def write_to_file_homa(packet_size, header_size, output_file, flows):
+    file = open(output_file, "w")
+    # file.write(str(len(flows))+'\n')
+    last_time = flows[0][0]
+    for f in flows:
+        s = ""
+        s += "{0} {1} {2} {3} {4}\n".format(f[3], f[1], f[2], f[4], f[0] - last_time)
+        last_time = f[0]
+        file.write(s)
+    file.close()
+
 def test_avg_load(num_hosts, flows, bandwidth, test_fcnt, fcnt=128):
     #flows.append([time, src, dst, flow_id, size])
     data_sent_per_port = []
@@ -595,6 +718,8 @@ def main():
         help='type of workload generator [P: Poisson, PD: Poisson for DCQCN, DI: DCQCN Incast... more to be added soon]')
     parser.add_argument('-iat','--iat',default=0,
         help='type of iat distribution [0: exponentially sampled, 1: constant uniform value')
+    parser.add_argument('-ov','--ov',default=1,
+        help='oversubscription')
 
     args = parser.parse_args()
     packet_size = int(args.packetsize)
@@ -610,6 +735,7 @@ def main():
     output = str(args.output)
     rtt = float(args.rtt)
     iat = int(args.iat)
+    ov = int(args.ov)
 
     fcnt = int(args.fcnt)
     incast_degree = int(args.incast)
@@ -647,6 +773,16 @@ def main():
         flows = poissonSemiPermutationFlowGeneratorMaxLimits(packet_size, header_size, mean_flow_size,num_flows, num_hosts, bandwidth, load, cdf, 1,fcnt,alpha,iat)
         test_avg_load(num_hosts,flows,bandwidth,True,fcnt)
         write_to_file_hpcc(packet_size,header_size,output,flows)
+    elif(gen_type == 'HOMA'):
+        assert(num_flows <= (num_hosts * fcnt))
+        flows = poissonSemiPermutationFlowGeneratorMaxLimits(packet_size, header_size, mean_flow_size,num_flows, num_hosts, bandwidth, load, cdf, 1,fcnt,alpha,iat)
+        test_avg_load(num_hosts,flows,bandwidth,True,fcnt)
+        write_to_file_homa(packet_size,header_size,output,flows)
+    elif(gen_type == 'HOMA-OV'):
+        assert(num_flows <= (num_hosts * fcnt))
+        flows = poissonSemiPermutationFlowGeneratorMaxLimitsOversubscription(packet_size, header_size, mean_flow_size,num_flows, num_hosts, bandwidth, load, cdf, 1,fcnt,alpha,iat,ov,num_hosts_per_leaf)
+        test_avg_load(num_hosts,flows,bandwidth,True,fcnt)
+        write_to_file_homa(packet_size,header_size,output,flows)
     elif(gen_type == 'IC'):
         assert(num_flows <= (num_hosts * fcnt))
         flows = poissonIncastGenerator(packet_size, header_size, mean_flow_size,num_flows, num_hosts, bandwidth, load, cdf, 1,fcnt,alpha,iat)
