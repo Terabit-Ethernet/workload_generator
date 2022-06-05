@@ -143,7 +143,7 @@ def main():
         help='the network load')
     parser.add_argument('-il', '--iload', default=0.02,
         help='the network load')
-    parser.add_argument('-tl', '--tcpload', default=0.3,
+    parser.add_argument('-tl', '--tcpload', default=0.0,
         help='the network load of TCP')
     parser.add_argument('-F', '--format', default='pim',
         help='the output file format: pim, homa, ndp, hpcc')
