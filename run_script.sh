@@ -1,7 +1,7 @@
 #!/bin/bash
 
 loads=(5 6 7 8 9)
-algos=(homa ndp pim)
+algos=(pim)
 calc(){ awk "BEGIN { print "$*" }"; }
 pids=()
 

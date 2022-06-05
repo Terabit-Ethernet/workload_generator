@@ -135,10 +135,10 @@ def main():
         help='the number of nodes')
     parser.add_argument('-f', '--flows', default=400000,
         help='the number of flows')
-    parser.add_argument('-c', '--cdf', default='aditya',
+    parser.add_argument('-c', '--cdf', default='imc10',
         help='flow size cdf')
     parser.add_argument('-b', '--bandwidth', default=100000000000,
-        help='bandwidth default: 100000000000Gbps')
+        help='bandwidth default: 100Gbps')
     parser.add_argument('-l', '--load', default=0.8,
         help='the network load')
     parser.add_argument('-il', '--iload', default=0.02,
