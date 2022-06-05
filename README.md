@@ -1,3 +1,6 @@
 # Workload Generator
 The generator uses Python 2.7.
-./run.sh imc10: generate incast workload.
+To run the generator,
+```
+./run_script.sh imc10
+```
