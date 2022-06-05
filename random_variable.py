@@ -11,12 +11,6 @@ class CDFentry:
         cdf_ = 0
         val_ = 0
 
-class ConstantVariable:
-    def __init__(self,val):
-        self.val = val
-    def value(self):
-        return self.val
-
 class UniformRandomVariable:
     def __init__(self):
         self.min_ = 0.0
@@ -36,13 +30,11 @@ class ExponentialRandomVariable:
 
 class EmpiricalRandomVariable:
 
-    def __init__(self, filename, smooth, packetsize, headersize):
+    def __init__(self, filename, smooth):
         self.smooth = smooth
         self.minCDF_ = 0
         self.maxCDF_ = 1
         self.table_ = []
-        self.packetSize_ = packetsize
-        self.headerSize_ = headersize
         for i in range(65536):
             self.table_.append(CDFentry())
         if(filename != ""):
@@ -71,7 +63,7 @@ class EmpiricalRandomVariable:
             prev_sz = self.table_[numEntry_].val_
             numEntry_ += 1
 
-        self.mean_flow_size = w_sum * float(self.packetSize_ - self.headerSize_);
+        self.mean_flow_size = w_sum * 1460.0;
         file.close()
         self.numEntry_ = numEntry_
         return numEntry_
@@ -103,5 +95,4 @@ class EmpiricalRandomVariable:
             return self.interpolate(u, self.table_[mid-1].cdf_, self.table_[mid-1].val_,
                 self.table_[mid].cdf_, self.table_[mid].val_)
         return self.table_[mid].val_
-
 
