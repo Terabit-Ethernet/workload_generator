@@ -1,8 +1,6 @@
 #!/bin/bash
 
 loads=(5 6 7 8 9)
-incast_load=0
-tcp_load=0
 algos=(ndp)
 calc(){ awk "BEGIN { print "$*" }"; }
 pids=()
@@ -19,7 +17,7 @@ do
 	    algo=${algos[$i]}
 	    # echo conf_"$algo"_dctcp_$load.txt
 	    # echo "$OUTPUT_FOLDER"/result_"$algo"_dctcp_"$load".txt
-	    echo python flow_generator.py -l 0.${load} -F $algo -c ${TRACE}
+	    echo "python flow_generator.py -il 0 -tl 0 -l 0.${load} -F $algo -c ${TRACE} > $OUTPUT_FOLDER/$algo/trace_${TRACE}_${load}.txt"
 	    python3 flow_generator.py -il 0 -tl 0 -l 0.${load} -F $algo -c ${TRACE} > $OUTPUT_FOLDER/$algo/trace_${TRACE}_${load}.txt
 	    #	nohup ./batch_simulate_sflow.py -P $p -F ../../../data/ -t ${threshold[$index]} -i 10 -N 1000 -s 1 -l results/conext18/flows/percentage-${percentage[$index]}.log &
 	    pids[${index}]=$!
