@@ -75,7 +75,7 @@ class EmpiricalRandomVariable:
         if u <= self.table_[0].cdf_:
             return 0
         while lo < hi:
-            mid = (lo + hi) / 2
+            mid = int((lo + hi) / 2)
             if u > self.table_[mid].cdf_:
                 lo = mid + 1
             else:

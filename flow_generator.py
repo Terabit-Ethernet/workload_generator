@@ -21,27 +21,27 @@ def convert_to_homa_format(flows):
         start_time = flow[TIME] - 1.0
         output = "{} {} {} {}".format(flow[SRC], flow[DST],  int(flow[SIZE]), start_time - last_time)
         last_time = start_time
-        print output
+        print (output)
         i += 1
 
 def convert_to_ndp_format(flows):
     i = 0
     for flow in flows:
         output = "{},{},{},{},{}".format(i, flow[SRC], flow[DST], int(flow[SIZE]), flow[TIME] - 1.0)
-        print output
+        print (output)
         i += 1
 def convert_to_hpcc_format(flows):
     i = 0
-    print len(flows)
+    print (len(flows))
     for flow in flows:
-        print "{} {} {} {} 100 {} {} {}".format(i, flow[SRC], flow[DST], int(flow[PG]) , int(flow[SIZE]) / 1460 * 1500, flow[TIME], flow[TYPE])
+        print ("{} {} {} {} 100 {} {} {}".format(i, flow[SRC], flow[DST], int(flow[PG]) , int(flow[SIZE]) / 1460 * 1500, flow[TIME], flow[TYPE]))
         i += 1
 
 def convert_to_pim_format(flows):
     i = 0
     for flow in flows:
         output = "{} {} {} {} {} {} {} {} {}".format(i, flow[0], -1, -1, int(flow[1]) / 1460, -1, -1, flow[2], flow[3])
-        print output
+        print (output)
         i += 1
 
 def poissonFlowGenerator(num_flows, num_hosts, bandwidth, load, filename, smooth, is_tcp = 0, pg = 3):
