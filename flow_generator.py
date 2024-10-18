@@ -34,7 +34,7 @@ def convert_to_hpcc_format(flows):
     i = 0
     print (len(flows))
     for flow in flows:
-        print ("{} {} {} {} 100 {} {} {}".format(i, flow[SRC], flow[DST], int(flow[PG]) , int(flow[SIZE]) / 1460 * 1500, flow[TIME], flow[TYPE]))
+        print ("{} {} {} 100 {} {}".format(flow[SRC], flow[DST], int(flow[PG]) , int(flow[SIZE] / 1460 * 1500), flow[TIME] - 1.0))
         i += 1
 
 def convert_to_pim_format(flows):
@@ -133,7 +133,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-s', '--scale', default=144,
         help='the number of nodes')
-    parser.add_argument('-f', '--flows', default=400000,
+    parser.add_argument('-f', '--flows', default=100000,
         help='the number of flows')
     parser.add_argument('-c', '--cdf', default='imc10',
         help='flow size cdf')
