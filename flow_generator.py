@@ -34,6 +34,7 @@ def convert_to_hpcc_format(flows):
     i = 0
     print (len(flows))
     for flow in flows:
+        # load represents payload load; the acutal load will be slightly higher due to packet headers
         print ("{} {} {} 100 {} {}".format(flow[SRC], flow[DST], int(flow[PG]) , int(flow[SIZE] / 1460 * 1500), flow[TIME] - 1.0))
         i += 1
 
@@ -60,6 +61,47 @@ def poissonFlowGenerator(num_flows, num_hosts, bandwidth, load, filename, smooth
             if i != j:
                 first_flow_time = 1.0 + nv_intarr.value()
                 heapq.heappush(pq,[first_flow_time, i, j, nv_bytes, nv_intarr])
+
+    next_time = 0
+    finish_time = 0
+    while len(flows) < num_flows:
+        element = heapq.heappop(pq)
+        flow_id = len(flows)
+        time = element[0]
+        finish_time = time
+        src = element[1]
+        dst = element[2]
+        nv_bytes = element[3]
+        nv_intarr = element[4]
+        size = nv_bytes.value() + 0.5 # truncate(val + 0.5) equivalent to round to nearest int
+        if (size > 2500000):
+            size = 2500000
+        size = int(size) * 1460
+        next_time = time + nv_intarr.value()
+        flows.append([time, size,  src, dst, is_tcp, pg])
+        heapq.heappush(pq,[next_time, src, dst, nv_bytes, nv_intarr])
+
+    return flows, finish_time
+
+def poissonPermFlowGenerator(num_flows, num_hosts, bandwidth, load, filename, smooth, is_tcp = 0, pg = 3):
+    pq = []
+    nv_bytes = EmpiricalRandomVariable(filename, smooth)
+    flows = []
+    if load == 0.0:
+        return flows, 0 
+    mean_flow_size = nv_bytes.mean_flow_size
+    lmda = bandwidth * load / (mean_flow_size * 8.0 / 1460 * 1500)
+    lambda_per_host = lmda
+
+    nv_intarr = ExponentialRandomVariable(1.0 / lambda_per_host)
+    hostSet = set({})
+    for i in range(num_hosts):
+        dst = random.randint(0, num_hosts - 1)
+        while dst in hostSet or i == dst:
+            dst = random.randint(0, num_hosts - 1)
+        hostSet.add(dst)
+        first_flow_time = 1.0 + nv_intarr.value()
+        heapq.heappush(pq,[first_flow_time, i, dst, nv_bytes, nv_intarr])
 
     next_time = 0
     finish_time = 0
@@ -133,6 +175,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-s', '--scale', default=144,
         help='the number of nodes')
+    parser.add_argument('-p', '--perm', action='store_true', 
+        help='Enable permutation')
     parser.add_argument('-f', '--flows', default=100000,
         help='the number of flows')
     parser.add_argument('-c', '--cdf', default='imc10',
@@ -159,7 +203,10 @@ def main():
     flows = []
     # FILE = str(scale)+'-'+str(load)+'-'+str(stages)+'-'+str(args.incast)+'-'+str(args.outcast)+'-'+ str(data_dist)
     # output_file = output + FILE + '.txt'
-    flows, next_time = poissonFlowGenerator(num_flows, num_hosts, bandwidth, load, "CDF_{}.txt".format(cdf), 1, 0, 3)
+    if args.perm:
+        flows, next_time = poissonPermFlowGenerator(num_flows, num_hosts, bandwidth, load, "CDF_{}.txt".format(cdf), 1, 0, 3)
+    else:
+        flows, next_time = poissonFlowGenerator(num_flows, num_hosts, bandwidth, load, "CDF_{}.txt".format(cdf), 1, 0, 3)
     flows2 = poissonFlowIncastGenerator(num_flows, num_hosts, bandwidth, iload, "CDF_{}.txt".format(cdf), 1, next_time, 50, 64000, 1, 2)
     tcp_flow, next_time = poissonFlowGenerator(num_flows, num_hosts, bandwidth, tcp_load, "CDF_{}.txt".format(cdf), 1, 1, 1)
     for f in flows2:
